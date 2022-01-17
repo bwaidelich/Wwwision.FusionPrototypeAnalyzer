@@ -3,7 +3,6 @@ declare(strict_types=1);
 
 namespace Wwwision\FusionPrototypeAnalyzer\ValueObject;
 
-use JetBrains\PhpStorm\Internal\TentativeType;
 use Neos\Flow\Annotations as Flow;
 
 /**

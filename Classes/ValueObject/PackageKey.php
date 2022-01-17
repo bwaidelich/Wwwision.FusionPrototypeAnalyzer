@@ -12,7 +12,7 @@ final class PackageKey implements \Serializable
 {
     private string $value;
 
-    private static $instances = [];
+    private static array $instances = [];
 
     private function __construct(string $value)
     {

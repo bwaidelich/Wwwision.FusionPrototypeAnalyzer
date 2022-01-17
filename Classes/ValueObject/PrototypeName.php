@@ -12,10 +12,13 @@ final class PrototypeName implements \Serializable
 {
     private string $value;
 
-    private static $instances = [];
+    private static array $instances = [];
 
     private function __construct(string $value)
     {
+        if (substr_count($value, ':') !== 1) {
+            throw new \InvalidArgumentException(sprintf('Fully qualified Fusion prototype name (like "Some.Package:Some.Prototype") expected, given: "%s"', $value), 1642409220);
+        }
         $this->value = $value;
     }
 

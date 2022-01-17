@@ -26,8 +26,8 @@ final class PrototypeAnalyzer
 
     public function getPrototypesUsing(PrototypeName $prototypeNameToSearch, PackageKey $sitePackageKey): PrototypeNames
     {
-        $objectTree = FusionObjectTree::fromObjectTreeArray($this->fusionService->getMergedFusionObjectTreeForSitePackage($sitePackageKey->toString()));
         $result = PrototypeNames::create();
+        $objectTree = $this->fusionObjectTreeForSitePackage($sitePackageKey);
         foreach ($objectTree->prototypeNames() as $prototypeName) {
             if ($this->getPrototypeNames($objectTree, $prototypeName)->has($prototypeNameToSearch)) {
                 $result = $result->with($prototypeName);
@@ -38,8 +38,18 @@ final class PrototypeAnalyzer
 
     public function getNestedPrototypeNames(PrototypeName $prototypeName, PackageKey $sitePackageKey): PrototypeNames
     {
-        $objectTree = FusionObjectTree::fromObjectTreeArray($this->fusionService->getMergedFusionObjectTreeForSitePackage($sitePackageKey->toString()));
-        return $this->getPrototypeNames($objectTree, $prototypeName);
+        return $this->getPrototypeNames($this->fusionObjectTreeForSitePackage($sitePackageKey), $prototypeName);
+    }
+
+    // --------------------------------
+
+    private function fusionObjectTreeForSitePackage(PackageKey $sitePackageKey): FusionObjectTree
+    {
+        try {
+            return FusionObjectTree::fromObjectTreeArray($this->fusionService->getMergedFusionObjectTreeForSitePackage($sitePackageKey->toString()));
+        } catch (\Exception $e) {
+            throw new \RuntimeException(sprintf('Failed to parse Fusion Object Tree for site package "%s": %s', $sitePackageKey->toString(), $e->getMessage()), 1642409521, $e);
+        }
     }
 
     private function getPrototypeNames(FusionObjectTree $objectTree, PrototypeName $rootPrototypeName): PrototypeNames
