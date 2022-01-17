@@ -66,6 +66,30 @@ In order for the right Fusion Object Tree to be loaded, the context site package
 
 If it is omitted, the site package is extracted from the specified prototype name
 
+### Find prototypes used by Node Type
+
+Allows finding prototypes that are used by a specified Node Type (recursively):
+
+    ./flow prototype:findbynodetype Some.Package:Some.NodeType
+
+This might output something like:
+
+    The node type Some.Package:Some.NodeType uses 3 Fusion prototypes (for site package Some.Package):
+
+    Some.Package (5)
+       Component.Template.Component1
+       Component.Template.Component2
+       Document.SomeDocument
+       Document.SomeOtherDocument
+
+
+#### Site package
+
+In order for the right Fusion Object Tree to be loaded, the context site package key can be specified:
+
+    ./flow prototype:findbynodetype Some.Package:Some.NodeType --site-package Some.Other.Package
+
+If it is omitted, the site package is extracted from the specified node type name
 
 ## Contribution
 

@@ -5,6 +5,7 @@ namespace Wwwision\FusionPrototypeAnalyzer\Command;
 
 use Neos\Flow\Cli\CommandController;
 use Wwwision\FusionPrototypeAnalyzer\PrototypeAnalyzer;
+use Wwwision\FusionPrototypeAnalyzer\ValueObject\NodeTypeName;
 use Wwwision\FusionPrototypeAnalyzer\ValueObject\PackageKey;
 use Wwwision\FusionPrototypeAnalyzer\ValueObject\PrototypeName;
 use Wwwision\FusionPrototypeAnalyzer\ValueObject\PrototypeNames;
@@ -66,6 +67,34 @@ final class PrototypeCommandController extends CommandController
         $this->outputLine();
         $this->renderPrototypeNames($prototypeNames);
     }
+
+    /**
+     * Finds all¹ Fusion prototypes that are used by the specified node type (recursively)
+     *
+     * Note: In order to load the correct Fusion Object Tree, the site package should be specified
+     *
+     * ¹ Only Fusion prototypes with the same name as the node type and all tethered (aka tethered) *content* child nodes are considered!
+     *
+     * @param string $nodeType The fully qualified NodeType name (e.g. "Some.Package:Some.Node.Type")
+     * @param string|null $sitePackage The site package to assume to be active. If omitted, the package key is extracted from the specified node type
+     * @return void
+     */
+    public function findByNodeTypeCommand(string $nodeType, string $sitePackage = null): void
+    {
+        $nodeTypeToAnalyze = NodeTypeName::fromString($nodeType);
+        $sitePackageKey = $sitePackage !== null ? PackageKey::fromString($sitePackage) : $nodeTypeToAnalyze->packageKey();
+        $prototypeNames = $this->analyzer->getNestedPrototypeNamesByNodeType($nodeTypeToAnalyze, $sitePackageKey);
+        $numberOfResults = count($prototypeNames);
+        if ($numberOfResults === 0) {
+            $this->outputLine('<comment>The node type <b>%s</b> does not seem to use any Fusion prototypes (for site package <b>%s</b>)</comment>', [$nodeTypeToAnalyze, $sitePackageKey]);
+            return;
+        }
+        $this->outputLine('<success>The node type <b>%s</b> uses <b>%d</b> Fusion prototype%s (for site package <b>%s</b>):</success>', [$nodeTypeToAnalyze, $numberOfResults, $numberOfResults === 1 ? '' : 's', $sitePackageKey]);
+        $this->outputLine();
+        $this->renderPrototypeNames($prototypeNames);
+    }
+
+    // --------------------------
 
     private function renderPrototypeNames(PrototypeNames $prototypeNames): void
     {

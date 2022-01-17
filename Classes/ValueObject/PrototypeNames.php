@@ -44,6 +44,11 @@ final class PrototypeNames implements \IteratorAggregate, \Countable
         return new self($prototypeNames);
     }
 
+    public function merge(self $other): self
+    {
+        return new self(array_merge($this->prototypeNames, $other->prototypeNames));
+    }
+
     public function has(PrototypeName $prototypeName): bool
     {
         return array_key_exists($prototypeName->toString(), $this->prototypeNames);
