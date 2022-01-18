@@ -6,7 +6,7 @@ Anaylze Neos Fusion prototypes and their usages by other prototypes.
 
 Install via composer:
 
-    composer require wwwision/fusion-prototype-analyzer
+    composer require --dev wwwision/fusion-prototype-analyzer
 
 ## Usage
 
