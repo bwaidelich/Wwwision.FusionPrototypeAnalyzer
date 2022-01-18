@@ -42,11 +42,16 @@ final class PrototypeAnalyzer
         $result = PrototypeNames::create();
         $objectTree = $this->fusionObjectTreeForSitePackage($sitePackageKey);
         foreach ($objectTree->prototypeNames() as $prototypeName) {
-            if ($this->getNestedPrototypeNames($objectTree, $prototypeName)->has($prototypeNameToSearch)) {
+            if ($this->nestedPrototypeNames($objectTree, $prototypeName)->has($prototypeNameToSearch)) {
                 $result = $result->with($prototypeName);
             }
         }
         return $result;
+    }
+
+    public function getNestedPrototypeNames(PrototypeName $prototypeName, PackageKey $sitePackageKey): PrototypeNames
+    {
+        return $this->nestedPrototypeNames($this->fusionObjectTreeForSitePackage($sitePackageKey), $prototypeName);
     }
 
     public function getNestedPrototypeNamesByNodeType(NodeTypeName $nodeTypeName, PackageKey $sitePackageKey): PrototypeNames
@@ -73,10 +78,10 @@ final class PrototypeAnalyzer
             }
         } while ($stack !== []);
         $fusionObjectTree = $this->fusionObjectTreeForSitePackage($sitePackageKey);
-        $prototypeNames = $this->getNestedPrototypeNames($fusionObjectTree, PrototypeName::fromString($nodeTypeName->toString()));
+        $prototypeNames = $this->nestedPrototypeNames($fusionObjectTree, PrototypeName::fromString($nodeTypeName->toString()));
         foreach (array_keys($childNodeTypeNames) as $childNodeTypeName) {
             try {
-                $prototypeNamesOfChildNode = $this->getNestedPrototypeNames($fusionObjectTree, PrototypeName::fromString($childNodeTypeName));
+                $prototypeNamesOfChildNode = $this->nestedPrototypeNames($fusionObjectTree, PrototypeName::fromString($childNodeTypeName));
             } catch (PrototypeNotFoundInObjectTree $exception) {
                 // TODO error?
                 continue;
@@ -107,7 +112,7 @@ final class PrototypeAnalyzer
         return FusionObjectTree::fromObjectTreeArray($fusionObjectTree);
     }
 
-    private function getNestedPrototypeNames(FusionObjectTree $objectTree, PrototypeName $rootPrototypeName): PrototypeNames
+    private function nestedPrototypeNames(FusionObjectTree $objectTree, PrototypeName $rootPrototypeName): PrototypeNames
     {
         $prototypeNames = PrototypeNames::create();
         $stack = [$rootPrototypeName];
