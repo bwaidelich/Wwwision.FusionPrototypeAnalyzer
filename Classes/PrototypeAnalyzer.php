@@ -12,6 +12,7 @@ use Neos\Neos\Domain\Repository\SiteRepository;
 use Neos\Neos\Domain\Service\ContentContext;
 use Neos\Neos\Domain\Service\FusionService;
 use Wwwision\FusionPrototypeAnalyzer\Exception\PrototypeNotFoundInObjectTree;
+use Wwwision\FusionPrototypeAnalyzer\ValueObject\AnalyzerResult;
 use Wwwision\FusionPrototypeAnalyzer\ValueObject\FusionObjectTree;
 use Wwwision\FusionPrototypeAnalyzer\ValueObject\NodeTypeName;
 use Wwwision\FusionPrototypeAnalyzer\ValueObject\PackageKey;
@@ -29,6 +30,8 @@ final class PrototypeAnalyzer
     private SiteRepository $siteRepository;
     private ContextFactoryInterface $contextFactory;
 
+    private array $errorMessages = [];
+
     public function __construct(FusionService $fusionService, NodeTypeManager $nodeTypeManager, SiteRepository $siteRepository, ContextFactoryInterface $contextFactory)
     {
         $this->fusionService = $fusionService;
@@ -37,28 +40,32 @@ final class PrototypeAnalyzer
         $this->contextFactory = $contextFactory;
     }
 
-    public function getPrototypesUsing(PrototypeName $prototypeNameToSearch, PackageKey $sitePackageKey): PrototypeNames
+    public function getPrototypesUsing(PrototypeName $prototypeNameToSearch, PackageKey $sitePackageKey): AnalyzerResult
     {
-        $result = PrototypeNames::create();
+        $this->errorMessages = [];
+        $prototypeNames = PrototypeNames::create();
         $objectTree = $this->fusionObjectTreeForSitePackage($sitePackageKey);
         foreach ($objectTree->prototypeNames() as $prototypeName) {
             if ($this->nestedPrototypeNames($objectTree, $prototypeName)->has($prototypeNameToSearch)) {
-                $result = $result->with($prototypeName);
+                $prototypeNames = $prototypeNames->with($prototypeName);
             }
         }
-        return $result;
+        return new AnalyzerResult($prototypeNames, $this->errorMessages);
     }
 
-    public function getNestedPrototypeNames(PrototypeName $prototypeName, PackageKey $sitePackageKey): PrototypeNames
+    public function getNestedPrototypeNames(PrototypeName $prototypeName, PackageKey $sitePackageKey): AnalyzerResult
     {
-        return $this->nestedPrototypeNames($this->fusionObjectTreeForSitePackage($sitePackageKey), $prototypeName);
+        $this->errorMessages = [];
+        $prototypeNames = $this->nestedPrototypeNames($this->fusionObjectTreeForSitePackage($sitePackageKey), $prototypeName);
+        return new AnalyzerResult($prototypeNames, $this->errorMessages);
     }
 
-    public function getNestedPrototypeNamesByNodeType(NodeTypeName $nodeTypeName, PackageKey $sitePackageKey): PrototypeNames
+    public function getNestedPrototypeNamesByNodeType(NodeTypeName $nodeTypeName, PackageKey $sitePackageKey): AnalyzerResult
     {
         if (!$this->nodeTypeManager->hasNodeType($nodeTypeName->toString())) {
             throw new \InvalidArgumentException(sprintf('The specified node type "%s" does not exist', $nodeTypeName->toString()), 1642411145);
         }
+        $this->errorMessages = [];
 
         $childNodeTypeNames = [];
         $stack = [$nodeTypeName->toString()];
@@ -83,12 +90,12 @@ final class PrototypeAnalyzer
             try {
                 $prototypeNamesOfChildNode = $this->nestedPrototypeNames($fusionObjectTree, PrototypeName::fromString($childNodeTypeName));
             } catch (PrototypeNotFoundInObjectTree $exception) {
-                // TODO error?
+                $this->errorMessages[] = $exception->getMessage();
                 continue;
             }
             $prototypeNames = $prototypeNames->merge($prototypeNamesOfChildNode);
         }
-        return $prototypeNames;
+        return new AnalyzerResult($prototypeNames, $this->errorMessages);
     }
 
     // --------------------------------
@@ -133,7 +140,7 @@ final class PrototypeAnalyzer
             try {
                 $nestedPrototypeNames = $getNestedPrototypeNames($objectTree, $prototypeName);
             } catch (PrototypeNotFoundInObjectTree $e) {
-                // TODO error?
+                $this->errorMessages[] = $e->getMessage();
                 continue;
             }
             foreach ($nestedPrototypeNames as $nestedPrototypeName) {

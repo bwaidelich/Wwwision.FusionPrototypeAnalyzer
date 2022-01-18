@@ -5,6 +5,7 @@ namespace Wwwision\FusionPrototypeAnalyzer\Command;
 
 use Neos\Flow\Cli\CommandController;
 use Wwwision\FusionPrototypeAnalyzer\PrototypeAnalyzer;
+use Wwwision\FusionPrototypeAnalyzer\ValueObject\AnalyzerResult;
 use Wwwision\FusionPrototypeAnalyzer\ValueObject\NodeTypeName;
 use Wwwision\FusionPrototypeAnalyzer\ValueObject\PackageKey;
 use Wwwision\FusionPrototypeAnalyzer\ValueObject\PrototypeName;
@@ -33,15 +34,8 @@ final class PrototypeCommandController extends CommandController
     {
         $prototypeNameToAnalyze = PrototypeName::fromString($prototype);
         $sitePackageKey = $sitePackage !== null ? PackageKey::fromString($sitePackage) : $prototypeNameToAnalyze->packageKey();
-        $prototypeNames = $this->analyzer->getNestedPrototypeNames($prototypeNameToAnalyze, $sitePackageKey);
-        $numberOfResults = count($prototypeNames);
-        if ($numberOfResults === 0) {
-            $this->outputLine('<comment>The prototype <b>%s</b> does not seem to use any nested prototypes (for site package <b>%s</b>)</comment>', [$prototypeNameToAnalyze, $sitePackageKey]);
-            return;
-        }
-        $this->outputLine('<success>The prototype <b>%s</b> contains <b>%d</b> other prototype%s (for site package <b>%s</b>):</success>', [$prototypeNameToAnalyze, $numberOfResults, $numberOfResults === 1 ? '' : 's', $sitePackageKey]);
-        $this->outputLine();
-        $this->renderPrototypeNames($prototypeNames);
+        $result = $this->analyzer->getNestedPrototypeNames($prototypeNameToAnalyze, $sitePackageKey);
+        $this->renderResult($result, sprintf('The Fusion prototype <b>%s</b> contains <b>%%d</b> other prototype%%s (for site package <b>%s</b>)', $prototypeNameToAnalyze, $sitePackageKey));
     }
 
     /**
@@ -57,15 +51,8 @@ final class PrototypeCommandController extends CommandController
     {
         $prototypeNameToSearch = PrototypeName::fromString($prototype);
         $sitePackageKey = $sitePackage !== null ? PackageKey::fromString($sitePackage) : $prototypeNameToSearch->packageKey();
-        $prototypeNames = $this->analyzer->getPrototypesUsing($prototypeNameToSearch, $sitePackageKey);
-        $numberOfResults = count($prototypeNames);
-        if ($numberOfResults === 0) {
-            $this->outputLine('<comment>The prototype <b>%s</b> is not used by any other prototype (for site package <b>%s</b>)</comment>', [$prototypeNameToSearch, $sitePackageKey]);
-            return;
-        }
-        $this->outputLine('<success>The prototype <b>%s</b> is used by <b>%d</b> other prototype%s (for site package <b>%s</b>):</success>', [$prototypeNameToSearch, $numberOfResults, $numberOfResults === 1 ? '' : 's', $sitePackageKey]);
-        $this->outputLine();
-        $this->renderPrototypeNames($prototypeNames);
+        $result = $this->analyzer->getPrototypesUsing($prototypeNameToSearch, $sitePackageKey);
+        $this->renderResult($result, sprintf('The Fusion prototype <b>%s</b> is used by <b>%%d</b> other prototype%%s (for site package <b>%s</b>)', $prototypeNameToSearch, $sitePackageKey));
     }
 
     /**
@@ -83,18 +70,31 @@ final class PrototypeCommandController extends CommandController
     {
         $nodeTypeToAnalyze = NodeTypeName::fromString($nodeType);
         $sitePackageKey = $sitePackage !== null ? PackageKey::fromString($sitePackage) : $nodeTypeToAnalyze->packageKey();
-        $prototypeNames = $this->analyzer->getNestedPrototypeNamesByNodeType($nodeTypeToAnalyze, $sitePackageKey);
-        $numberOfResults = count($prototypeNames);
-        if ($numberOfResults === 0) {
-            $this->outputLine('<comment>The node type <b>%s</b> does not seem to use any Fusion prototypes (for site package <b>%s</b>)</comment>', [$nodeTypeToAnalyze, $sitePackageKey]);
-            return;
-        }
-        $this->outputLine('<success>The node type <b>%s</b> uses <b>%d</b> Fusion prototype%s (for site package <b>%s</b>):</success>', [$nodeTypeToAnalyze, $numberOfResults, $numberOfResults === 1 ? '' : 's', $sitePackageKey]);
-        $this->outputLine();
-        $this->renderPrototypeNames($prototypeNames);
+        $result = $this->analyzer->getNestedPrototypeNamesByNodeType($nodeTypeToAnalyze, $sitePackageKey);
+        $this->renderResult($result, sprintf('The Node Type <b>%s</b> uses <b>%%d</b> Fusion prototype%%s (for site package <b>%s</b>)', $nodeTypeToAnalyze, $sitePackageKey));
     }
 
     // --------------------------
+
+    private function renderResult(AnalyzerResult $result, string $message): void
+    {
+        $numberOfResults = count($result->prototypeNames);
+        if ($numberOfResults === 0) {
+            $this->outputLine('<comment>%s</comment>', [sprintf($message, $numberOfResults, 's')]);
+        } else {
+            $this->outputLine('<success>%s:</success>', [sprintf($message, $numberOfResults, $numberOfResults === 1 ? '' : 's')]);
+            $this->outputLine();
+            $this->renderPrototypeNames($result->prototypeNames);
+        }
+        if ($result->hasErrors()) {
+            $numberOfErrors = count($result->errorMessages);
+            $this->outputLine();
+            $this->outputLine('<error>The following %d error%s occurred:</error>', [$numberOfErrors, $numberOfErrors === 1 ? '' : 's']);
+            foreach ($result->errorMessages as $errorMessage) {
+                $this->outputLine('   <comment>%s</comment>', [$errorMessage]);
+            }
+        }
+    }
 
     private function renderPrototypeNames(PrototypeNames $prototypeNames): void
     {
