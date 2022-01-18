@@ -1,6 +1,6 @@
 # Wwwision.FusionPrototypeAnalyzer
 
-Anaylze Neos Fusion prototypes and their usages by other prototypes.
+Analyze Neos Fusion prototypes and their usages by other prototypes.
 
 ## Installation
 
