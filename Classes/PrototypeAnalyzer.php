@@ -3,11 +3,14 @@ declare(strict_types=1);
 
 namespace Wwwision\FusionPrototypeAnalyzer;
 
+use Neos\ContentRepository\Domain\Projection\Content\TraversableNodeInterface;
+use Neos\ContentRepository\Domain\Service\ContextFactoryInterface;
 use Neos\ContentRepository\Domain\Service\NodeTypeManager;
 use Neos\ContentRepository\Utility;
 use Neos\Flow\Annotations as Flow;
-use Neos\Neos\Service\NodeTypeSchemaBuilder;
-use Sitegeist\Monocle\Fusion\FusionService;
+use Neos\Neos\Domain\Repository\SiteRepository;
+use Neos\Neos\Domain\Service\ContentContext;
+use Neos\Neos\Domain\Service\FusionService;
 use Wwwision\FusionPrototypeAnalyzer\Exception\PrototypeNotFoundInObjectTree;
 use Wwwision\FusionPrototypeAnalyzer\ValueObject\FusionObjectTree;
 use Wwwision\FusionPrototypeAnalyzer\ValueObject\NodeTypeName;
@@ -23,11 +26,15 @@ final class PrototypeAnalyzer
 
     private FusionService $fusionService;
     private NodeTypeManager $nodeTypeManager;
+    private SiteRepository $siteRepository;
+    private ContextFactoryInterface $contextFactory;
 
-    public function __construct(FusionService $fusionService, NodeTypeManager $nodeTypeManager)
+    public function __construct(FusionService $fusionService, NodeTypeManager $nodeTypeManager, SiteRepository $siteRepository, ContextFactoryInterface $contextFactory)
     {
         $this->fusionService = $fusionService;
         $this->nodeTypeManager = $nodeTypeManager;
+        $this->siteRepository = $siteRepository;
+        $this->contextFactory = $contextFactory;
     }
 
     public function getPrototypesUsing(PrototypeName $prototypeNameToSearch, PackageKey $sitePackageKey): PrototypeNames
@@ -35,16 +42,11 @@ final class PrototypeAnalyzer
         $result = PrototypeNames::create();
         $objectTree = $this->fusionObjectTreeForSitePackage($sitePackageKey);
         foreach ($objectTree->prototypeNames() as $prototypeName) {
-            if ($this->getPrototypeNames($objectTree, $prototypeName)->has($prototypeNameToSearch)) {
+            if ($this->getNestedPrototypeNames($objectTree, $prototypeName)->has($prototypeNameToSearch)) {
                 $result = $result->with($prototypeName);
             }
         }
         return $result;
-    }
-
-    public function getNestedPrototypeNames(PrototypeName $prototypeName, PackageKey $sitePackageKey): PrototypeNames
-    {
-        return $this->getPrototypeNames($this->fusionObjectTreeForSitePackage($sitePackageKey), $prototypeName);
     }
 
     public function getNestedPrototypeNamesByNodeType(NodeTypeName $nodeTypeName, PackageKey $sitePackageKey): PrototypeNames
@@ -71,10 +73,10 @@ final class PrototypeAnalyzer
             }
         } while ($stack !== []);
         $fusionObjectTree = $this->fusionObjectTreeForSitePackage($sitePackageKey);
-        $prototypeNames = $this->getPrototypeNames($fusionObjectTree, PrototypeName::fromString($nodeTypeName->toString()));
+        $prototypeNames = $this->getNestedPrototypeNames($fusionObjectTree, PrototypeName::fromString($nodeTypeName->toString()));
         foreach (array_keys($childNodeTypeNames) as $childNodeTypeName) {
             try {
-                $prototypeNamesOfChildNode = $this->getPrototypeNames($fusionObjectTree, PrototypeName::fromString($childNodeTypeName));
+                $prototypeNamesOfChildNode = $this->getNestedPrototypeNames($fusionObjectTree, PrototypeName::fromString($childNodeTypeName));
             } catch (PrototypeNotFoundInObjectTree $exception) {
                 // TODO error?
                 continue;
@@ -88,40 +90,52 @@ final class PrototypeAnalyzer
 
     private function fusionObjectTreeForSitePackage(PackageKey $sitePackageKey): FusionObjectTree
     {
+        /** @noinspection PhpUndefinedMethodInspection */
+        $site = $this->siteRepository->findOneBySiteResourcesPackageKey($sitePackageKey->toString());
+        if ($site === null) {
+            throw new \InvalidArgumentException(sprintf('A site with resource package key "%s" does not exist', $sitePackageKey->toString()), 1642428167);
+        }
+        /** @var ContentContext $contentContext */
+        $contentContext = $this->contextFactory->create(['currentSite' => $site]);
+        /** @var TraversableNodeInterface $siteNode */
+        $siteNode = $contentContext->getCurrentSiteNode();
         try {
-            return FusionObjectTree::fromObjectTreeArray($this->fusionService->getMergedFusionObjectTreeForSitePackage($sitePackageKey->toString()));
+            $fusionObjectTree = $this->fusionService->getMergedFusionObjectTree($siteNode);
         } catch (\Exception $e) {
             throw new \RuntimeException(sprintf('Failed to parse Fusion Object Tree for site package "%s": %s', $sitePackageKey->toString(), $e->getMessage()), 1642409521, $e);
         }
+        return FusionObjectTree::fromObjectTreeArray($fusionObjectTree);
     }
 
-    private function getPrototypeNames(FusionObjectTree $objectTree, PrototypeName $rootPrototypeName): PrototypeNames
+    private function getNestedPrototypeNames(FusionObjectTree $objectTree, PrototypeName $rootPrototypeName): PrototypeNames
     {
-        $rootPrototypeAst = $objectTree->prototypeAst($rootPrototypeName);
         $prototypeNames = PrototypeNames::create();
-        $stack = $this->fusionService->getAnatomicalPrototypeTreeFromAstExcerpt($rootPrototypeAst);
+        $stack = [$rootPrototypeName];
+
+        $getNestedPrototypeNames = static function(FusionObjectTree $objectTree, PrototypeName $prototypeName): PrototypeNames {
+            $prototypeNames = PrototypeNames::create();
+            $prototypeAst = $objectTree->prototypeAst($prototypeName);
+            array_walk_recursive($prototypeAst, static function ($value, $key) use (&$prototypeNames) {
+                if ($key === '__objectType' && !empty($value)) {
+                    $prototypeNames = $prototypeNames->with(PrototypeName::fromString($value));
+                }
+            });
+            return $prototypeNames;
+        };
+
         do {
-            $item = array_pop($stack);
-            foreach ($item['children'] ?? [] as $child) {
-                $stack[] = $child;
-            }
-            if (!isset($item['prototypeName'])) {
-                // TODO exception?
-                continue;
-            }
-            $prototypeName = PrototypeName::fromString($item['prototypeName']);
-            if ($prototypeNames->has($prototypeName)) {
-                continue;
-            }
-            $prototypeNames = $prototypeNames->with($prototypeName);
+            $prototypeName = array_pop($stack);
             try {
-                $prototypeAst = $objectTree->prototypeAst($prototypeName);
+                $nestedPrototypeNames = $getNestedPrototypeNames($objectTree, $prototypeName);
             } catch (PrototypeNotFoundInObjectTree $e) {
-                // TODO error
+                // TODO error?
                 continue;
             }
-            foreach ($this->fusionService->getAnatomicalPrototypeTreeFromAstExcerpt($prototypeAst) as $subItem) {
-                $stack[] = $subItem;
+            foreach ($nestedPrototypeNames as $nestedPrototypeName) {
+                if (!$prototypeNames->has($nestedPrototypeName)) {
+                    $prototypeNames = $prototypeNames->with($nestedPrototypeName);
+                    $stack[] = $nestedPrototypeName;
+                }
             }
 
         } while ($stack !== []);

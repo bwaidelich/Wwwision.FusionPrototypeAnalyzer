@@ -94,7 +94,6 @@ If it is omitted, the site package is extracted from the specified node type nam
 ## Contribution
 
 Contributions in the form of issues or pull requests are highly appreciated.
-This package just provides some simple classes making use of the `FusionService` provided by [Sitegeist.Monocle](https://github.com/sitegeist/Sitegeist.Monocle), thanks for your great work!
 
 ## License
 
